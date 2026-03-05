@@ -56,6 +56,10 @@ pub struct Process {
     pub heap_bottom: usize,
     /// 当前程序 break 位置（堆顶）
     pub program_brk: usize,
+    /// 当前 stride 值（用于 stride 调度）
+    pub stride: usize,
+    /// 进程优先级（>= 2）
+    pub priority: usize,
 }
 
 impl Process {
@@ -66,6 +70,8 @@ impl Process {
         self.context = proc.context;
         self.heap_bottom = proc.heap_bottom;
         self.program_brk = proc.program_brk;
+        self.stride = proc.stride;
+        self.priority = proc.priority;
     }
 
     /// fork：复制当前进程创建子进程
@@ -100,6 +106,8 @@ impl Process {
             fd_table: new_fd_table,
             heap_bottom: self.heap_bottom,
             program_brk: self.program_brk,
+            stride: self.stride,
+            priority: self.priority,
         })
     }
 
@@ -193,7 +201,33 @@ impl Process {
             ],
             heap_bottom,
             program_brk: heap_bottom,
+            stride: 0,
+            priority: 16,
         })
+    }
+
+    /// 设置进程优先级。
+    #[inline]
+    pub fn set_priority(&mut self, prio: isize) -> isize {
+        if prio < 2 {
+            -1
+        } else {
+            self.priority = prio as usize;
+            prio
+        }
+    }
+
+    /// 计算当前进程 pass。
+    #[inline]
+    pub fn pass(&self) -> usize {
+        const BIG_STRIDE: usize = 65536;
+        BIG_STRIDE / self.priority
+    }
+
+    /// 调度后推进 stride。
+    #[inline]
+    pub fn advance_stride(&mut self) {
+        self.stride = self.stride.wrapping_add(self.pass());
     }
 
     /// 修改程序 break 位置（实现 sbrk 系统调用）
